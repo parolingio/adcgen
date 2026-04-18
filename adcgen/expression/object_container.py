@@ -926,7 +926,7 @@ class ObjectContainer(Container):
         if wrap_result:
             assumptions = self.assumptions
             assumptions["target_idx"] = target
-            ret = ExprContainer(expanded, **assumptions)
+            expanded = ExprContainer(expanded, **assumptions)
         return expanded
 
     def use_explicit_denominators(self, wrap_result: bool = True

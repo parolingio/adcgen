@@ -2,7 +2,7 @@ from adcgen import Operators, GroundState, ExprContainer, simplify, sort
 from sympy import Symbol
 
 
-order = 1
+order = 2
 space = "pphh"
 indices = "ijab"
 

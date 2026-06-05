@@ -1,7 +1,7 @@
 from math import factorial
 
 from sympy.physics.secondquant import NO, Dagger
-from sympy import Expr, Mul, Rational, S, latex
+from sympy import Expr, Mul, Rational, S, latex, Symbol
 
 from .expression import ExprContainer
 from .func import gen_term_orders
@@ -153,6 +153,13 @@ class GroundState:
             return self.mp_amplitude(order, space, indices)
         elif variant == 're':
             return self.amplitude_residual(order, space, indices)
+        elif variant == 'remp':
+            remp_A = Symbol("A")
+            mp_gs = GroundState(Operator(variant="mp"))
+            re_gs = GroundState(Operator(variant="re"))
+            return ( remp_A * mp_gs.mp_amplitude(order, space, indices)
+                   + (1-remp_A) * re_gs.amplitude_residual(order, space,
+                                                                     indices) )
         else:
             raise NotImplementedError("Amplitudes not implemented for "
                                       f"{self.h._variant}")

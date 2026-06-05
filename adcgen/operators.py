@@ -2,7 +2,7 @@ from collections.abc import Sequence
 from functools import cached_property
 from typing import Any
 
-from sympy import Add, Expr, Rational, Mul, factorial, latex
+from sympy import Add, Expr, Rational, Mul, factorial, latex, Symbol
 from sympy.physics.secondquant import Fd, F
 
 from .misc import cached_member
@@ -42,6 +42,8 @@ class Operators:
             return self.mp_h0()
         elif self._variant == 're':
             return self.re_h0()
+        elif self._variant == 'remp':
+            return self.remp_h0()
         else:
             raise NotImplementedError(
                 f"H0 not implemented for {self._variant}"
@@ -54,6 +56,8 @@ class Operators:
             return self.mp_h1()
         elif self._variant == 're':
             return self.re_h1()
+        elif self._variant == 'remp':
+            return self.remp_h1()
         else:
             raise NotImplementedError(
                 f"H1 not implented for {self._variant}"
@@ -211,3 +215,26 @@ class Operators:
         if isinstance(other, Operators):
             return self._variant == other._variant
         return False
+
+    @staticmethod
+    def remp_h0() -> tuple[Expr, None]:
+        """Constructs the zeroth-order REMP Hamiltonian."""
+        from .operators import Operators
+        remp_A = Symbol("A")
+        rules = Rules(forbidden_tensor_blocks={
+            tensor_names.fock: ('ov', 'vo'),
+            tensor_names.eri: ('ooov', 'oovv', 'ovvv', 'ovoo', 'vvoo', 'vvov')
+        })
+        return (remp_A*Operators.mp_h0()[0] + (1-remp_A)*Operators.re_h0()[0],
+                rules)
+
+    @staticmethod
+    def remp_h1() -> tuple[Expr, None]:
+        """Constructs the first-order REMP Hamiltonian."""
+        from .operators import Operators
+        remp_A = Symbol("A")
+        rules = Rules(forbidden_tensor_blocks={
+            tensor_names.fock: ['oo', 'vv']
+        })
+        return (remp_A*Operators.mp_h1()[0] + (1-remp_A)*Operators.re_h1()[0],
+                rules)

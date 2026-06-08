@@ -216,25 +216,100 @@ class Operators:
             return self._variant == other._variant
         return False
 
+   # @staticmethod
+   # def remp_h0() -> tuple[Expr, None]:
+   #     """Constructs the zeroth-order REMP Hamiltonian."""
+   #     from .operators import Operators
+   #     remp_A = Symbol("A")
+   #     rules = Rules(forbidden_tensor_blocks={
+   #         tensor_names.fock: ('ov', 'vo'),
+   #         tensor_names.eri: ('ooov', 'oovv', 'ovvv', 'ovoo', 'vvoo', 'vvov')
+   #     })
+   #     return (remp_A*Operators.mp_h0()[0] + (1-remp_A)*Operators.re_h0()[0],
+   #             rules)
+
     @staticmethod
     def remp_h0() -> tuple[Expr, None]:
         """Constructs the zeroth-order REMP Hamiltonian."""
-        from .operators import Operators
+        idx_cls = Indices()
+        i, j, k, l = idx_cls.get_generic_indices(occ=4)[("occ", "")][:4]
+        a, b, c, d = idx_cls.get_generic_indices(virt=4)[("virt", "")][:4]
         remp_A = Symbol("A")
-        rules = Rules(forbidden_tensor_blocks={
-            tensor_names.fock: ('ov', 'vo'),
-            tensor_names.eri: ('ooov', 'oovv', 'ovvv', 'ovoo', 'vvoo', 'vvov')
-        })
-        return (remp_A*Operators.mp_h0()[0] + (1-remp_A)*Operators.re_h0()[0],
-                rules)
+
+        f = tensor_names.fock
+        V = tensor_names.eri
+
+        E0 = Add(
+                AntiSymmetricTensor(f, (i,), (i,)),
+                Mul(Add(-1, remp_A), AntiSymmetricTensor(V, (i, j), (i,j)),
+                    Rational(1,2))
+                )
+        h0 = Add(
+                E0,
+                Mul(remp_A, AntiSymmetricTensor(f, (i,), (a,)), Fd(i), F(a)),
+                Mul(remp_A, AntiSymmetricTensor(f, (a,), (i,)), Fd(a), F(i)),
+                Mul(AntiSymmetricTensor(f, (a,), (b,)), Fd(a), F(b)),
+                Mul(-1, AntiSymmetricTensor(f, (i,), (j,)), F(j), Fd(i)),
+                Mul(Add(1, -remp_A), AntiSymmetricTensor(V, (i,j,), (k,l,)),
+                      F(k), F(l), Fd(j), Fd(i), Rational(1,4)),
+                Mul(Add(1, -remp_A), AntiSymmetricTensor(V, (a,b,), (c,d,)),
+                      Fd(a), Fd(b), F(d), F(c), Rational(1,4)),
+                Mul(Add(1, -remp_A), AntiSymmetricTensor(V, (i,a,), (j,b,)),
+                      Fd(a), F(j), F(b), Fd(i))
+                )
+        assert isinstance(h0, Expr)
+        logger.debug(f"H0 = {latex(h0)}")
+        return h0, None
 
     @staticmethod
     def remp_h1() -> tuple[Expr, None]:
         """Constructs the first-order REMP Hamiltonian."""
-        from .operators import Operators
+        idx_cls = Indices()
+        i, j, k, l, m, n = idx_cls.get_generic_indices(occ=6)[("occ", "")][:6]
+        a, b, c, d, e, f = idx_cls.get_generic_indices(virt=6)[("virt", "")][:6]
         remp_A = Symbol("A")
-        rules = Rules(forbidden_tensor_blocks={
-            tensor_names.fock: ['oo', 'vv']
-        })
-        return (remp_A*Operators.mp_h1()[0] + (1-remp_A)*Operators.re_h1()[0],
-                rules)
+
+        f = tensor_names.fock
+        V = tensor_names.eri
+
+        E1 = - Mul(remp_A, AntiSymmetricTensor(V, (i, j), (i,j)))
+        h1 = Add(
+                E1,
+                Mul(Add(1, -remp_A),
+                      AntiSymmetricTensor(f, (i,), (a,)), Fd(i), F(a)), # F_{ov}
+                Mul(Add(1, -remp_A),
+                      AntiSymmetricTensor(f, (a,), (i,)), Fd(a), F(i)), # F_{vo}
+                Mul(AntiSymmetricTensor(V, (i,j,), (a,b,)),
+                      Fd(i), Fd(j), F(b), F(a), Rational(1,4)), # -2
+                Mul(AntiSymmetricTensor(V, (i,j,), (k,a,)),
+                      F(k), F(a), Fd(j), Fd(i), Rational(1,2)), # -1
+                Mul(AntiSymmetricTensor(V, (i,a,), (b,c,)),
+                      Fd(a), Fd(i), F(b), F(c), Rational(1,2)), # -1
+                Mul(remp_A, AntiSymmetricTensor(V, (i,j,), (k,l,)),
+                      F(k), F(l), Fd(j), Fd(i), Rational(1,4)), #  0
+                Mul(remp_A, AntiSymmetricTensor(V, (a,b,), (c,d,)),
+                      Fd(a), Fd(b), F(d), F(c), Rational(1,4)), #  0
+                Mul(remp_A, AntiSymmetricTensor(V, (i,a,), (j,b,)),
+                      Fd(a), F(j), F(b), Fd(i)),                #  0
+                Mul(AntiSymmetricTensor(V, (k,a,), (i,j,)),
+                      F(i), F(j), Fd(a), Fd(k), Rational(1,2)), # +1
+                Mul(AntiSymmetricTensor(V, (b,c,), (i,a,)),
+                      Fd(c), Fd(b), F(i), F(a), Rational(1,2)), # +1
+                Mul(AntiSymmetricTensor(V, (a,b,), (i,j,)),
+                      Fd(a), Fd(b), F(j), F(i), Rational(1,4))  # +2
+                )
+
+        assert isinstance(h1, Expr)
+        logger.debug(f"H1 = {latex(h1)}")
+        return h1, None
+
+  #  @staticmethod
+  #  def remp_h1() -> tuple[Expr, None]:
+  #      """Constructs the first-order REMP Hamiltonian."""
+  #      from .operators import Operators
+  #      remp_A = Symbol("A")
+  #      rules = Rules(forbidden_tensor_blocks={
+  #          tensor_names.fock: ['oo', 'vv']
+  #      })
+  #      return (remp_A*Operators.mp_h1()[0] + (1-remp_A)*Operators.re_h1()[0],
+  #              rules)

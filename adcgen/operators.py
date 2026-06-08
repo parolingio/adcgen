@@ -265,8 +265,8 @@ class Operators:
     def remp_h1() -> tuple[Expr, None]:
         """Constructs the first-order REMP Hamiltonian."""
         idx_cls = Indices()
-        i, j, k, l, m, n = idx_cls.get_generic_indices(occ=6)[("occ", "")][:6]
-        a, b, c, d, e, f = idx_cls.get_generic_indices(virt=6)[("virt", "")][:6]
+        i, j, k, l = idx_cls.get_generic_indices(occ=4)[("occ", "")][:4]
+        a, b, c, d = idx_cls.get_generic_indices(virt=4)[("virt", "")][:4]
         remp_A = Symbol("A")
 
         f = tensor_names.fock

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from functools import cached_property
 import itertools
 
-from sympy import Add, Expr, Min, Mul, Pow, Rational, S
+from sympy import Add, Expr, Min, Mul, Pow, Rational, S, Symbol
 
 from .expression import ExprContainer, ObjectContainer
 from .core_valence_separation import allowed_cvs_blocks
@@ -1128,6 +1128,237 @@ class t2_2_re_residual(RegisteredIntermediate):
     def _build_tensor(self, indices: Sequence[Index]) -> Expr:
         # placeholder for 0, will be replaced in factor_intermediate
         return AntiSymmetricTensor("Zero", indices[:2], indices[2:])
+
+
+# REMP Residuals
+
+class t2_1_remp_residual(RegisteredIntermediate):
+    """
+    Residual of the first order REMP doubles amplitudes.
+    """
+    _itmd_type = "remp_residual"
+    _order = 2  # according to MP the maximum order of the residual is 2
+    _default_idx = ("i", "j", "a", "b")
+
+    @cached_member
+    def _build_expanded_itmd(self, fully_expand: bool = True) -> ItmdExpr:
+        # re intermediates can not be fully expanded, but add the bool
+        # anyway for a consistent interface
+        _ = fully_expand
+        i, j, a, b = get_symbols(self.default_idx)
+        # additional contracted indices
+        k, l, c, d = get_symbols('klcd')
+
+        # REMP mixing parameter
+        remp_A = Symbol("A")
+
+        # t2_1 class instance
+        t2 = self._registry['t_amplitude']['t2_1']
+
+        itmd = S.Zero
+
+        # (1-A) * (1 - P_ij)(1 - P_ab) <ic||ka> t_jk^bc
+        ampl = t2.tensor(indices=[j, k, b, c])
+        assert isinstance(ampl, ExprContainer)
+        base = ampl * eri([i, c, k, a])
+        temp = Add(
+            base.inner,
+            -base.copy().permute((i, j)).inner,
+            -base.copy().permute((a, b)).inner,
+            base.copy().permute((i, j), (a, b)).inner
+        )
+        itmd += temp - remp_A * temp
+        # (1 - P_ab) f_ac t_ij^bc
+        ampl = t2.tensor(indices=[i, j, b, c])
+        assert isinstance(ampl, ExprContainer)
+        base = ampl * fock([a, c])
+        itmd += Add(base.inner, -base.copy().permute((a, b)).inner)
+        # (1 - P_ij) f_jk t_ik^ab
+        ampl = t2.tensor(indices=[i, k, a, b])
+        assert isinstance(ampl, ExprContainer)
+        base = ampl * fock([j, k])
+        itmd += Add(base.inner, -base.copy().permute((i, j)).inner)
+        # -0.5 * (1-A) * <ab||cd> t_ij^cd
+        temp = (Rational(1, 2) * eri((a, b, c, d)) *
+                 t2.tensor(indices=(i, j, c, d), wrap_result=False))
+        itmd -= temp - remp_A * temp
+        # -0.5 * (1-A) * <ij||kl> t_kl^ab
+        temp = (Rational(1, 2) * eri((i, j, k, l)) *
+                 t2.tensor(indices=(k, l, a, b), wrap_result=False))
+        itmd -= temp - remp_A * temp
+        # + <ij||ab>
+        itmd += eri((i, j, a, b))
+        target = (i, j, a, b)
+        contracted = (k, l, c, d)
+        return ItmdExpr(itmd, target, contracted)
+
+    def _build_tensor(self, indices: Sequence[Index]) -> Expr:
+        # placeholder for 0, will be replaced in factor_intermediate
+        return AntiSymmetricTensor("Zero", indices[:2], indices[2:])
+
+
+class t1_2_remp_residual(RegisteredIntermediate):
+    """
+    Residual of the second order RE singles amplitudes.
+    """
+    _itmd_type = "remp_residual"
+    _order = 3  # according to MP the maximum order of the residual is 3
+    _default_idx = ("i", "a")
+
+    @cached_member
+    def _build_expanded_itmd(self, fully_expand: bool = True):
+        _ = fully_expand
+        i, a = get_symbols(self.default_idx)
+        # additional contracted indices
+        j, k, b, c = get_symbols('jkbc')
+
+        # REMP mixing parameter
+        remp_A = Symbol("A")
+
+        # t amplitudes
+        t2 = self._registry['t_amplitude']['t2_1']
+        ts2 = self._registry['t_amplitude']['t1_2']
+        td2 = self._registry['t_amplitude']['t2_2']
+
+        # - (1-A) * {V^{ib}_{ja}} {t2^{b}_{j}}
+        itmd = (
+            -Add(1, -remp_A) *
+            eri([i, b, j, a]) * ts2.tensor(indices=[j, b], wrap_result=False)
+        )
+        # + {f^{a}_{b}} {t2^{b}_{i}}
+        itmd += (
+            fock([a, b]) * ts2.tensor(indices=[i, b], wrap_result=False)
+        )
+        # - {f^{i}_{j}} {t2^{a}_{j}}
+        itmd -= (
+            fock([i, j]) * ts2.tensor(indices=[j, a], wrap_result=False)
+        )
+        # + \frac{{V^{ja}_{bc}} {t1^{bc}_{ij}}}{2}
+        itmd += (Rational(1, 2) * eri([j, a, b, c])
+                 * t2.tensor(indices=[i, j, b, c], wrap_result=False))
+        # + \frac{{V^{jk}_{ib}} {t1^{ab}_{jk}}}{2}
+        itmd += (Rational(1, 2) * eri([j, k, i, b])
+                 * t2.tensor(indices=[j, k, a, b], wrap_result=False))
+        # - (1-A) * {f^{j}_{b}} {t1^{ab}_{ij}}
+        # DO I REALLY NEED THIS?
+        itmd -= (
+            Add(1, -remp_A) *
+            fock([j, b]) * t2.tensor(indices=[i, j, a, b], wrap_result=False)
+        )
+        # -A * {f^{j}_{b}} {t2^{ab}_{ij}}
+        # DO I REALLY NEED THIS?
+        itmd -= (
+            remp_A *
+            fock([j, b]) * td2.tensor(indices=[i, j, a, b], wrap_result=False)
+        )
+        target = (i, a)
+        contracted = (j, k, b, c)
+        return ItmdExpr(itmd, target, contracted)
+
+    def _build_tensor(self, indices: Sequence[Index]) -> Expr:
+        # placeholder for 0, will be replaced in factor_intermediate
+        return AntiSymmetricTensor("Zero", (indices[0],), (indices[1],))
+
+
+class t2_2_remp_residual(RegisteredIntermediate):
+    """
+    Residual of the second order RE doubles amplitudes.
+    """
+    _itmd_type = "remp_residual"
+    _order = 3  # according to MP the maximum order of the residual is 3
+    _default_idx = ("i", "j", "a", "b")
+
+    @cached_member
+    def _build_expanded_itmd(self, fully_expand: bool = True) -> ItmdExpr:
+        _ = fully_expand
+        i, j, a, b = get_symbols(self.default_idx)
+        # additional contracted indices
+        k, l, c, d = get_symbols('klcd')
+
+        # REMP mixing parameter
+        remp_A = Symbol("A")
+
+        # t2_1 class instance
+        t2 = self._registry['t_amplitude']['t2_1']
+        ts2 = self._registry['t_amplitude']['t1_2']
+        td2 = self._registry['t_amplitude']['t2_2']
+        tt2 = self._registry['t_amplitude']['t3_2']
+
+        itmd = S.Zero
+
+        # (1-A) * (1 - P_ij)(1 - P_ab) <ic||ka> t2_jk^bc
+        ampl = td2.tensor(indices=[j, k, b, c])
+        assert isinstance(ampl, ExprContainer)
+        base = Add(1, -remp_A) * ampl * eri([i, c, k, a])
+        itmd += Add(
+            base.inner,
+            -base.copy().permute((i, j)).inner,
+            -base.copy().permute((a, b)).inner,
+            base.copy().permute((i, j), (a, b)).inner
+        )
+        # (1 - P_ab) f_ac t2_ij^bc
+        ampl = td2.tensor(indices=[i, j, b, c])
+        assert isinstance(ampl, ExprContainer)
+        base = ampl * fock([a, c])
+        itmd += Add(
+            base.inner, -base.copy().permute((a, b)).inner
+        )
+        # (1 - P_ij) f_jk t2_ik^ab
+        ampl = td2.tensor(indices=[i, k, a, b])
+        assert isinstance(ampl, ExprContainer)
+        base = ampl * fock([j, k])
+        itmd += Add(
+            base.inner, -base.copy().permute((i, j)).inner
+        )
+        # -0.5 * (1-A) * <ab||cd> t2_ij^cd
+        itmd -= (Rational(1, 2) * Add(1, -remp_A) * eri((a, b, c, d)) *
+                 td2.tensor(indices=(i, j, c, d), wrap_result=False))
+        # -0.5 * (1-A) * <ij||kl> t2_kl^ab
+        itmd -= (Rational(1, 2) * Add(1, -remp_A) * eri((i, j, k, l)) *
+                 td2.tensor(indices=(k, l, a, b), wrap_result=False))
+        # A * (1 - P_ij)(1 - P_ab) <ic||ka> t1_jk^bc
+        ampl = t2.tensor(indices=[j, k, b, c])
+        assert isinstance(ampl, ExprContainer)
+        base = remp_A * ampl * eri([i, c, k, a])
+        itmd += Add(
+            base.inner,
+            -base.copy().permute((i, j)).inner,
+            -base.copy().permute((a, b)).inner,
+            base.copy().permute((i, j), (a, b)).inner
+        )
+        # -0.5 * A * <ab||cd> t1_ij^cd
+        itmd -= (Rational(1, 2) * remp_A * eri((a, b, c, d)) *
+                 t2.tensor(indices=(i, j, c, d), wrap_result=False))
+        # -0.5 * A * <ij||kl> t1_kl^ab
+        itmd -= (Rational(1, 2) * remp_A * eri((i, j, k, l)) *
+                 t2.tensor(indices=(k, l, a, b), wrap_result=False))
+        # A * (1 - P_ij)(1 - P_ab) f_ia t2_j^b
+        # DO I REALLY NEED THIS?
+        ampl = ts2.tensor(indices=[j, b])
+        assert isinstance(ampl, ExprContainer)
+        base = remp_A * ampl * fock([i, a])
+        itmd += Add(
+            base.inner,
+            -base.copy().permute((i, j)).inner,
+            -base.copy().permute((a, b)).inner,
+            base.copy().permute((i, j), (a, b)).inner
+        )
+        #  A * t2_ijk^abc * f_kc
+        # DO I REALLY NEED THIS?
+        ampl = tt2.tensor(indices=[i, j, k, a, b, c])
+        assert isinstance(ampl, ExprContainer)
+        itmd += remp_A * ampl * fock([k, c])
+        #
+        target = (i, j, a, b)
+        contracted = (k, l, c, d)
+        return ItmdExpr(itmd, target, contracted)
+
+    def _build_tensor(self, indices: Sequence[Index]) -> Expr:
+        # placeholder for 0, will be replaced in factor_intermediate
+        return AntiSymmetricTensor("Zero", indices[:2], indices[2:])
+
+
+# End REMP residuals
 
 
 class p0_2_oo(RegisteredIntermediate):

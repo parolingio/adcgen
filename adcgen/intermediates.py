@@ -1240,13 +1240,11 @@ class t1_2_remp_residual(RegisteredIntermediate):
         itmd += (Rational(1, 2) * eri([j, k, i, b])
                  * t2.tensor(indices=[j, k, a, b], wrap_result=False))
         # - (1-A) * {f^{j}_{b}} {t1^{ab}_{ij}}
-        # DO I REALLY NEED THIS?
         itmd -= (
             Add(1, -remp_A) *
             fock([j, b]) * t2.tensor(indices=[i, j, a, b], wrap_result=False)
         )
         # -A * {f^{j}_{b}} {t2^{ab}_{ij}}
-        # DO I REALLY NEED THIS?
         itmd -= (
             remp_A *
             fock([j, b]) * td2.tensor(indices=[i, j, a, b], wrap_result=False)
@@ -1333,7 +1331,6 @@ class t2_2_remp_residual(RegisteredIntermediate):
         itmd -= (Rational(1, 2) * remp_A * eri((i, j, k, l)) *
                  t2.tensor(indices=(k, l, a, b), wrap_result=False))
         # A * (1 - P_ij)(1 - P_ab) f_ia t2_j^b
-        # DO I REALLY NEED THIS?
         ampl = ts2.tensor(indices=[j, b])
         assert isinstance(ampl, ExprContainer)
         base = remp_A * ampl * fock([i, a])
@@ -1344,10 +1341,10 @@ class t2_2_remp_residual(RegisteredIntermediate):
             base.copy().permute((i, j), (a, b)).inner
         )
         #  A * t2_ijk^abc * f_kc
-        # DO I REALLY NEED THIS?
         ampl = tt2.tensor(indices=[i, j, k, a, b, c])
         assert isinstance(ampl, ExprContainer)
-        itmd += remp_A * ampl * fock([k, c])
+        base = remp_A * ampl * fock([k, c])
+        itmd += base.inner
         #
         target = (i, j, a, b)
         contracted = (k, l, c, d)
